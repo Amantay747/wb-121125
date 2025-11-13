@@ -1,0 +1,69 @@
+version: '3.9'
+
+services:
+  db: 
+    image: postgres:16
+    container_name: wb-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - wb-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+  
+  redis:
+    image: redis:7
+    container_name: wb-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    networks:
+      - wb-network
+
+  app:
+    build: ./app
+    container_name: wb-app
+    command: sh -c "npm run migrate && npm run start"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis: 
+        condition: service_started
+    networks:
+      - wb-network
+    ports:
+      - "8000:8000"
+    environment:
+      - PG_HOST=db
+      - PG_PORT=5432
+      - PG_USER=postgres
+      - PG_PASSWORD=postgres
+      - PG_DB=postgres
+      - WB_TOKEN=${WB_TOKEN}
+      - WB_TARIFFS_ENDPOINT=${WB_TARIFFS_ENDPOINT}
+      - GOOGLE_SERVICE_ACCOUNT_JSON=${GOOGLE_SERVICE_ACCOUNT_JSON}
+      - SHEETS_IDS=${SHEETS_IDS}
+      - SHEETS_SHEET_NAME=${SHEETS_SHEET_NAME}
+      - CRON_SCHEDULE=${CRON_SCHEDULE}
+    volumes:
+      - ./app:/usr/src/app
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  wb-network:
+    driver: bridge
